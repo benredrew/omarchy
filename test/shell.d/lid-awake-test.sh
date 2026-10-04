@@ -36,6 +36,14 @@ echo "systemd-run \$*" >>"$log"
 touch "$unit"
 STUB
 
+# logind lists the inhibitor while the unit runs, unless the test denies it.
+cat >"$stub_bin/systemd-inhibit" <<STUB
+#!/bin/bash
+if [[ -f "$unit" && ! -f "$TMPDIR/deny" ]]; then
+  echo "Omarchy 1000 user 1 systemd-inhibit handle-lid-switch Stay running block"
+fi
+STUB
+
 printf '#!/bin/bash\necho "omarchy-shell $*" >>"%s"\n' "$log" >"$stub_bin/omarchy-shell"
 chmod +x "$stub_bin"/*
 export PATH="$stub_bin:$ROOT/bin:$PATH"
@@ -77,3 +85,30 @@ if omarchy-toggle-lid-awake bogus 2>/dev/null; then
   fail "lid awake rejects unknown arguments"
 fi
 pass "lid awake rejects unknown arguments"
+
+touch "$TMPDIR/deny"
+if omarchy-toggle-lid-awake on 2>/dev/null; then
+  fail "lid awake on fails when logind withholds the inhibitor"
+fi
+[[ ! -f $unit ]] || fail "lid awake stops the unit when the inhibitor never appears"
+pass "lid awake on fails when logind withholds the inhibitor"
+rm -f "$TMPDIR/deny"
+
+printf '#!/bin/bash\nexit 1\n' >"$stub_bin/systemd-run"
+if omarchy-toggle-lid-awake on 2>/dev/null; then
+  fail "lid awake on fails when the unit cannot start"
+fi
+pass "lid awake on fails when the unit cannot start"
+
+touch "$unit"
+cat >"$stub_bin/systemctl" <<STUB
+#!/bin/bash
+case "\$*" in
+  *is-active*) [[ -f "$unit" ]] ;;
+  *stop*) exit 1 ;;
+esac
+STUB
+if omarchy-toggle-lid-awake off 2>/dev/null; then
+  fail "lid awake off fails when the unit cannot be stopped"
+fi
+pass "lid awake off fails when the unit cannot be stopped"

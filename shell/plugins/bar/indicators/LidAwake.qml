@@ -7,6 +7,7 @@ BarIndicator {
 
   property bool lidAwake: false
   property bool laptop: false
+  property bool refreshPending: false
 
   active: lidAwake
   activeText: "󰌢"
@@ -18,7 +19,13 @@ BarIndicator {
   visible: laptop && belongsInBlock
 
   function refresh() {
-    if (!root.bar || statusProc.running) return
+    if (!root.bar) return
+    // A check already running may have sampled the unit before a toggle, so
+    // run one more after it rather than dropping this request.
+    if (statusProc.running) {
+      root.refreshPending = true
+      return
+    }
     statusProc.running = true
   }
 
@@ -47,6 +54,10 @@ BarIndicator {
     command: ["systemctl", "--user", "--quiet", "is-active", "omarchy-lid-awake"]
     onExited: function(exitCode) {
       root.lidAwake = exitCode === 0
+      if (root.refreshPending) {
+        root.refreshPending = false
+        root.refresh()
+      }
     }
   }
 

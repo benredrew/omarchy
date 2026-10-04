@@ -17,17 +17,41 @@ lid_awake_enabled() {
   systemctl --user --quiet is-active "$UNIT"
 }
 
+lid_switch_inhibited() {
+  systemd-inhibit --list --no-legend 2>/dev/null | grep -q "^Omarchy .*handle-lid-switch"
+}
+
 enable_lid_awake() {
-  if ! lid_awake_enabled; then
-    systemd-run --user --collect --quiet --unit="$UNIT" \
-      systemd-inhibit --what=handle-lid-switch --mode=block \
-      --who="Omarchy" --why="Stay running with the lid closed" \
-      sleep infinity
+  if lid_awake_enabled; then
+    return 0
   fi
+
+  systemd-run --user --collect --quiet --unit="$UNIT" \
+    systemd-inhibit --what=handle-lid-switch --mode=block \
+    --who="Omarchy" --why="Stay running with the lid closed" \
+    sleep infinity || return
+
+  # The unit starting does not mean logind granted the inhibitor, so wait for
+  # it to show up, and stop the unit if it never does.
+  local attempt
+  for attempt in {1..20}; do
+    if lid_switch_inhibited; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  systemctl --user stop "$UNIT" 2>/dev/null
+  echo "Could not take the lid-switch inhibitor" >&2
+  return 1
 }
 
 disable_lid_awake() {
-  systemctl --user stop "$UNIT" 2>/dev/null || true
+  if ! lid_awake_enabled; then
+    return 0
+  fi
+
+  systemctl --user stop "$UNIT"
 }
 
 print_status() {
@@ -42,21 +66,25 @@ refresh_indicator() {
   omarchy-shell omarchy.indicators refresh >/dev/null 2>&1 || true
 }
 
+# A failed start or stop must not read as success: a caller that believes
+# suspend is back could put a laptop that will not sleep in a bag.
+status=0
+
 case "${1:-toggle}" in
   toggle)
     if lid_awake_enabled; then
-      disable_lid_awake
+      disable_lid_awake || status=$?
     else
-      enable_lid_awake
+      enable_lid_awake || status=$?
     fi
     refresh_indicator
     ;;
   on)
-    enable_lid_awake
+    enable_lid_awake || status=$?
     refresh_indicator
     ;;
   off)
-    disable_lid_awake
+    disable_lid_awake || status=$?
     refresh_indicator
     ;;
   status|--status)
@@ -67,3 +95,5 @@ case "${1:-toggle}" in
     exit 1
     ;;
 esac
+
+exit $status
