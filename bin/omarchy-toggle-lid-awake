@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# omarchy:summary=Keep a laptop running with the lid closed: it still locks and blanks, but does not suspend
+# omarchy:group=toggle
+# omarchy:args=[toggle|on|off|status]
+# omarchy:examples=omarchy toggle lid awake | omarchy toggle lid awake on | omarchy-toggle-lid-awake --status
+
+# A transient user unit holds a logind handle-lid-switch inhibitor while this
+# is on. Logind grants that to an active local session without a password, and
+# the unit is gone after a reboot, so a laptop can't be left stuck awake in a
+# bag. Closing the lid still runs omarchy-system-lid-close, so the session locks
+# and the panel blanks as usual.
+
+UNIT="omarchy-lid-awake"
+
+lid_awake_enabled() {
+  systemctl --user --quiet is-active "$UNIT"
+}
+
+enable_lid_awake() {
+  if ! lid_awake_enabled; then
+    systemd-run --user --collect --quiet --unit="$UNIT" \
+      systemd-inhibit --what=handle-lid-switch --mode=block \
+      --who="Omarchy" --why="Stay running with the lid closed" \
+      sleep infinity
+  fi
+}
+
+disable_lid_awake() {
+  systemctl --user stop "$UNIT" 2>/dev/null || true
+}
+
+print_status() {
+  if lid_awake_enabled; then
+    printf '{"enabled":true,"class":"enabled","tooltip":"Allow Lid-Close Suspend"}\n'
+  else
+    printf '{"enabled":false,"class":"disabled","tooltip":"Stay On With Lid Closed"}\n'
+  fi
+}
+
+refresh_indicator() {
+  omarchy-shell omarchy.indicators refresh >/dev/null 2>&1 || true
+}
+
+case "${1:-toggle}" in
+  toggle)
+    if lid_awake_enabled; then
+      disable_lid_awake
+    else
+      enable_lid_awake
+    fi
+    refresh_indicator
+    ;;
+  on)
+    enable_lid_awake
+    refresh_indicator
+    ;;
+  off)
+    disable_lid_awake
+    refresh_indicator
+    ;;
+  status|--status)
+    print_status
+    ;;
+  *)
+    echo "Usage: omarchy-toggle-lid-awake [toggle|on|off|status]" >&2
+    exit 1
+    ;;
+esac
