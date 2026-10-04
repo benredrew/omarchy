@@ -17,8 +17,15 @@ lid_awake_enabled() {
   systemctl --user --quiet is-active "$UNIT"
 }
 
+# Match the inhibitor by the unit's own process: other Omarchy commands, such
+# as shutdown, hold lid-switch inhibitors under the same name.
 lid_switch_inhibited() {
-  systemd-inhibit --list --no-legend 2>/dev/null | grep -q "^Omarchy .*handle-lid-switch"
+  local pid
+  pid=$(systemctl --user show --property=MainPID --value "$UNIT" 2>/dev/null)
+  [[ -n $pid && $pid != "0" ]] || return 1
+
+  systemd-inhibit --list --json=short 2>/dev/null |
+    jq -e --argjson pid "$pid" 'any(.[]; .pid == $pid and (.what | split(":") | index("handle-lid-switch")))' >/dev/null
 }
 
 enable_lid_awake() {
@@ -46,12 +53,16 @@ enable_lid_awake() {
   return 1
 }
 
+# Stop unconditionally rather than asking first: a failed is-active query looks
+# the same as an inactive unit, and would skip a stop that was needed. Exit 5
+# means the unit is not loaded, which is already off.
 disable_lid_awake() {
-  if ! lid_awake_enabled; then
-    return 0
+  local status=0
+  systemctl --user stop "$UNIT" 2>/dev/null || status=$?
+  if (( status == 5 )); then
+    status=0
   fi
-
-  systemctl --user stop "$UNIT"
+  return $status
 }
 
 print_status() {

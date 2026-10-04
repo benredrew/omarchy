@@ -13,8 +13,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Stand in for the user manager: a marker file is the running unit, and every
-# call is logged so the test can see what was started.
+# Stand in for the user manager and logind: a marker file is the running unit,
+# flag files break one piece at a time, and every call is logged.
 TMPDIR=$(mktemp -d)
 stub_bin="$TMPDIR/bin"
 unit="$TMPDIR/unit-active"
@@ -25,23 +25,39 @@ cat >"$stub_bin/systemctl" <<STUB
 #!/bin/bash
 echo "systemctl \$*" >>"$log"
 case "\$*" in
-  *is-active*) [[ -f "$unit" ]] ;;
-  *stop*) rm -f "$unit" ;;
+  *is-active*)
+    [[ ! -f "$TMPDIR/query-broken" && -f "$unit" ]]
+    ;;
+  *MainPID*)
+    if [[ -f "$unit" ]]; then echo 4242; else echo 0; fi
+    ;;
+  *stop*)
+    [[ ! -f "$TMPDIR/stop-broken" ]] || exit 1
+    [[ -f "$unit" ]] || exit 5
+    rm -f "$unit"
+    ;;
 esac
 STUB
 
 cat >"$stub_bin/systemd-run" <<STUB
 #!/bin/bash
 echo "systemd-run \$*" >>"$log"
+[[ ! -f "$TMPDIR/run-broken" ]] || exit 1
 touch "$unit"
 STUB
 
-# logind lists the inhibitor while the unit runs, unless the test denies it.
+# The unit's inhibitor is listed under its MainPID unless logind withholds it.
+# A shutdown in progress holds another lid-switch inhibitor under the same name.
 cat >"$stub_bin/systemd-inhibit" <<STUB
 #!/bin/bash
+entries=()
 if [[ -f "$unit" && ! -f "$TMPDIR/deny" ]]; then
-  echo "Omarchy 1000 user 1 systemd-inhibit handle-lid-switch Stay running block"
+  entries+=('{"who":"Omarchy","pid":4242,"what":"handle-lid-switch","mode":"block"}')
 fi
+if [[ -f "$TMPDIR/shutdown" ]]; then
+  entries+=('{"who":"Omarchy","pid":999,"what":"sleep:idle:handle-lid-switch","mode":"block"}')
+fi
+(IFS=,; echo "[\${entries[*]}]")
 STUB
 
 printf '#!/bin/bash\necho "omarchy-shell $*" >>"%s"\n' "$log" >"$stub_bin/omarchy-shell"
@@ -92,22 +108,30 @@ if omarchy-toggle-lid-awake on 2>/dev/null; then
 fi
 [[ ! -f $unit ]] || fail "lid awake stops the unit when the inhibitor never appears"
 pass "lid awake on fails when logind withholds the inhibitor"
-rm -f "$TMPDIR/deny"
 
-printf '#!/bin/bash\nexit 1\n' >"$stub_bin/systemd-run"
+touch "$TMPDIR/shutdown"
+if omarchy-toggle-lid-awake on 2>/dev/null; then
+  fail "lid awake on is not confirmed by another Omarchy lid-switch inhibitor"
+fi
+pass "lid awake on is not confirmed by another Omarchy lid-switch inhibitor"
+rm -f "$TMPDIR/deny" "$TMPDIR/shutdown"
+
+touch "$TMPDIR/run-broken"
 if omarchy-toggle-lid-awake on 2>/dev/null; then
   fail "lid awake on fails when the unit cannot start"
 fi
 pass "lid awake on fails when the unit cannot start"
+rm -f "$TMPDIR/run-broken"
 
-touch "$unit"
-cat >"$stub_bin/systemctl" <<STUB
-#!/bin/bash
-case "\$*" in
-  *is-active*) [[ -f "$unit" ]] ;;
-  *stop*) exit 1 ;;
-esac
-STUB
+omarchy-toggle-lid-awake on
+touch "$TMPDIR/query-broken"
+omarchy-toggle-lid-awake off
+[[ ! -f $unit ]] || fail "lid awake off stops the unit when the status query fails"
+pass "lid awake off stops the unit when the status query fails"
+rm -f "$TMPDIR/query-broken"
+
+omarchy-toggle-lid-awake on
+touch "$TMPDIR/stop-broken"
 if omarchy-toggle-lid-awake off 2>/dev/null; then
   fail "lid awake off fails when the unit cannot be stopped"
 fi
