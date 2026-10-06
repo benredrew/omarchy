@@ -9,6 +9,7 @@ BarIndicator {
   property bool laptop: false
   property bool refreshPending: false
   property double followerStartedAt: 0
+  property int followerRetryDelay: 5000
   readonly property var batteryService: bar?.shell?.firstPartyServiceFor("omarchy.battery")
   readonly property bool batteryFloorReached: batteryService ? batteryService.lidAwakeFloorReached : false
 
@@ -84,15 +85,20 @@ BarIndicator {
       root.followerStartedAt = Date.now()
       root.refresh()
     }
-    // Restart a follower that was killed after running for a while. One that
-    // exits straight away cannot read the journal, and restarting it would
-    // only poll; toggles still refresh the indicator over IPC.
-    onExited: if (Date.now() - root.followerStartedAt > 60000) followerRestart.start()
+    // Restart a follower that exits, backing off while it keeps exiting
+    // straight away, as one that cannot read the journal would, so a lasting
+    // failure retries every few minutes instead of polling. A follower that
+    // ran for a minute was working, so the next restart is quick again.
+    onExited: {
+      var ran = Date.now() - root.followerStartedAt
+      root.followerRetryDelay = ran > 60000 ? 5000 : Math.min(root.followerRetryDelay * 2, 300000)
+      followerRestart.interval = root.followerRetryDelay
+      followerRestart.start()
+    }
   }
 
   Timer {
     id: followerRestart
-    interval: 5000
     onTriggered: unitFollower.running = true
   }
 

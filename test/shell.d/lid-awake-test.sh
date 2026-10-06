@@ -149,6 +149,7 @@ grep -q 'onRead: root.refresh()' "$indicator" || fail "lid awake indicator refre
 grep -Pzq 'onStarted: \{[^}]*root\.refresh\(\)' "$indicator" || fail "lid awake indicator checks the unit once its follower is running"
 grep -q 'if (root.lidAwake && !unitFollower.running' "$indicator" || fail "lid awake indicator starts following on first use"
 ! grep -Pzq 'id: unitFollower[^}]*running: true' "$indicator" || fail "lid awake indicator runs no follower until first use"
-grep -q 'onExited: if (Date.now() - root.followerStartedAt > 60000)' "$indicator" || fail "lid awake indicator does not restart a follower that cannot run"
+grep -q 'Math.min(root.followerRetryDelay \* 2, 300000)' "$indicator" || fail "lid awake indicator backs off restarting a follower that keeps failing"
+grep -q 'followerRestart.start()' "$indicator" || fail "lid awake indicator restarts a follower that exits"
 ! grep -q 'repeat: true' "$indicator" || fail "lid awake indicator does not poll"
 pass "lid awake indicator follows its unit instead of polling"
