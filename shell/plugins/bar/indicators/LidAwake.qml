@@ -36,6 +36,7 @@ BarIndicator {
     laptopProc.running = true
     refresh()
   }
+  onLaptopChanged: unitFollower.running = laptop
 
   Connections {
     target: root.indicatorHost
@@ -60,6 +61,30 @@ BarIndicator {
         root.refreshPending = false
         root.refresh()
       }
+    }
+  }
+
+  // The unit can fail, restart, or stop outside the toggle. Its journal logs
+  // every change, so follow it rather than poll: lines wait in the pipe while
+  // the shell is busy, so none is missed. pdeathsig stops the follower if the
+  // shell dies without cleaning up its children.
+  Process {
+    id: unitFollower
+    command: ["setpriv", "--pdeathsig", "TERM", "journalctl", "--user", "--follow", "--lines=0", "--output=cat", "--unit=omarchy-lid-awake"]
+    stdout: SplitParser {
+      onRead: root.refresh()
+    }
+    onExited: if (root.laptop) followerRestart.start()
+  }
+
+  // Changes logged while the follower was down are not replayed, so check the
+  // unit again once it is back.
+  Timer {
+    id: followerRestart
+    interval: 5000
+    onTriggered: {
+      unitFollower.running = true
+      root.refresh()
     }
   }
 

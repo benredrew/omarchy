@@ -72,7 +72,6 @@ omarchy-toggle-lid-awake on
 grep -q -- '--what=handle-lid-switch' "$log" || fail "lid awake inhibits only the lid switch"
 grep -q -- '--unit=omarchy-lid-awake' "$log" || fail "lid awake runs as the omarchy-lid-awake unit"
 grep -q -- '--property=Restart=on-failure --property=RestartSec=1' "$log" || fail "lid awake restarts after an unexpected helper failure"
-grep -q -- "--property=ExecStartPost=-$OMARCHY_PATH/bin/omarchy-shell omarchy.indicators refresh --property=ExecStopPost=-$OMARCHY_PATH/bin/omarchy-shell omarchy.indicators refresh" "$log" || fail "lid awake refreshes the indicator whenever its unit starts or stops"
 pass "lid awake on starts a lid-switch inhibitor"
 
 grep -q 'omarchy-shell omarchy.indicators refresh' "$log" || fail "lid awake refreshes the bar indicator"
@@ -141,3 +140,11 @@ if omarchy-toggle-lid-awake off 2>/dev/null; then
   fail "lid awake off fails when the unit cannot be stopped"
 fi
 pass "lid awake off fails when the unit cannot be stopped"
+
+# The indicator follows the unit's journal instead of polling, so a failure,
+# restart, or stop outside the toggle still reaches the bar.
+indicator="$ROOT/shell/plugins/bar/indicators/LidAwake.qml"
+grep -q '"setpriv", "--pdeathsig", "TERM", "journalctl", "--user", "--follow", "--lines=0", "--output=cat", "--unit=omarchy-lid-awake"' "$indicator" || fail "lid awake indicator follows its unit's journal"
+grep -q 'onRead: root.refresh()' "$indicator" || fail "lid awake indicator refreshes on each journal entry"
+! grep -q 'repeat: true' "$indicator" || fail "lid awake indicator does not poll"
+pass "lid awake indicator follows its unit instead of polling"

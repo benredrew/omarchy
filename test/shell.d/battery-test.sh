@@ -50,7 +50,6 @@ JS
 run_node_test <<'JS'
 const fs = require('fs')
 const service = fs.readFileSync(root + '/shell/plugins/services/battery/Service.qml', 'utf8')
-const indicator = fs.readFileSync(root + '/shell/plugins/bar/indicators/LidAwake.qml', 'utf8')
 
 assert(
   /target:\s*"battery"[\s\S]*function checkLidAwakeFloor\(\): void[\s\S]*root\.checkLidAwakeBatteryFloor\(\)/.test(service),
@@ -59,9 +58,5 @@ assert(
 assert(
   /persisted\.lidAwakeFloorReached = true[\s\S]*root\.sendLidAwakeBatteryFloorWarning\(\)/.test(service),
   'every successful low-battery disarm sends an alert'
-)
-assert(
-  !/Timer \{/.test(indicator),
-  'Lid Awake does not poll; its unit refreshes the indicator on start and stop'
 )
 JS
