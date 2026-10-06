@@ -8,6 +8,7 @@ BarIndicator {
   property bool lidAwake: false
   property bool laptop: false
   property bool refreshPending: false
+  property double followerStartedAt: 0
   readonly property var batteryService: bar?.shell?.firstPartyServiceFor("omarchy.battery")
   readonly property bool batteryFloorReached: batteryService ? batteryService.lidAwakeFloorReached : false
 
@@ -36,7 +37,6 @@ BarIndicator {
     laptopProc.running = true
     refresh()
   }
-  onLaptopChanged: unitFollower.running = laptop
 
   Connections {
     target: root.indicatorHost
@@ -57,6 +57,10 @@ BarIndicator {
     command: ["systemctl", "--user", "--quiet", "is-active", "omarchy-lid-awake"]
     onExited: function(exitCode) {
       root.lidAwake = exitCode === 0
+      // Follow the unit from the first time it is seen on, and never stop:
+      // a laptop where Lid Awake is never used runs no follower at all.
+      if (root.lidAwake && !unitFollower.running && !followerRestart.running)
+        unitFollower.running = true
       if (root.refreshPending) {
         root.refreshPending = false
         root.refresh()
@@ -74,18 +78,22 @@ BarIndicator {
     stdout: SplitParser {
       onRead: root.refresh()
     }
-    onExited: if (root.laptop) followerRestart.start()
+    // Entries logged before the follower started are not replayed, so check
+    // the unit once it is following, at startup and after a restart alike.
+    onStarted: {
+      root.followerStartedAt = Date.now()
+      root.refresh()
+    }
+    // Restart a follower that was killed after running for a while. One that
+    // exits straight away cannot read the journal, and restarting it would
+    // only poll; toggles still refresh the indicator over IPC.
+    onExited: if (Date.now() - root.followerStartedAt > 60000) followerRestart.start()
   }
 
-  // Changes logged while the follower was down are not replayed, so check the
-  // unit again once it is back.
   Timer {
     id: followerRestart
     interval: 5000
-    onTriggered: {
-      unitFollower.running = true
-      root.refresh()
-    }
+    onTriggered: unitFollower.running = true
   }
 
   onPressed: function() {
