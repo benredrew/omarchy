@@ -71,10 +71,14 @@ omarchy-toggle-lid-awake on
 [[ -f $unit ]] || fail "lid awake on starts the inhibitor unit"
 grep -q -- '--what=handle-lid-switch' "$log" || fail "lid awake inhibits only the lid switch"
 grep -q -- '--unit=omarchy-lid-awake' "$log" || fail "lid awake runs as the omarchy-lid-awake unit"
+grep -q -- '--property=Restart=on-failure --property=RestartSec=1' "$log" || fail "lid awake restarts after an unexpected helper failure"
 pass "lid awake on starts a lid-switch inhibitor"
 
 grep -q 'omarchy-shell omarchy.indicators refresh' "$log" || fail "lid awake refreshes the bar indicator"
 pass "lid awake refreshes the bar indicator"
+
+grep -q 'omarchy-shell -q battery checkLidAwakeFloor' "$log" || fail "lid awake checks the battery floor immediately after enabling"
+pass "lid awake checks the battery floor immediately after enabling"
 
 : >"$log"
 omarchy-toggle-lid-awake on

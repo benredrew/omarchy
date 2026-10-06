@@ -46,3 +46,22 @@ assert(
   'lid awake does not disarm when its floor is disabled'
 )
 JS
+
+run_node_test <<'JS'
+const fs = require('fs')
+const service = fs.readFileSync(root + '/shell/plugins/services/battery/Service.qml', 'utf8')
+const indicator = fs.readFileSync(root + '/shell/plugins/bar/indicators/LidAwake.qml', 'utf8')
+
+assert(
+  /target:\s*"battery"[\s\S]*function checkLidAwakeFloor\(\): void[\s\S]*root\.checkLidAwakeBatteryFloor\(\)/.test(service),
+  'battery exposes an immediate Lid Awake floor check'
+)
+assert(
+  /persisted\.lidAwakeFloorReached = true[\s\S]*root\.sendLidAwakeBatteryFloorWarning\(\)/.test(service),
+  'every successful low-battery disarm sends an alert'
+)
+assert(
+  /Timer \{[\s\S]*interval: 5000[\s\S]*onTriggered: root\.refresh\(\)/.test(indicator),
+  'Lid Awake periodically refreshes a transient-unit failure'
+)
+JS

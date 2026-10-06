@@ -13,6 +13,13 @@
 
 UNIT="omarchy-lid-awake"
 
+check_battery_floor() {
+  # The regular battery poll is deliberately infrequent. Check immediately
+  # after enabling too, so a laptop already at its floor cannot stay awake for
+  # one poll interval.
+  omarchy-shell -q battery checkLidAwakeFloor >/dev/null 2>&1 || true
+}
+
 lid_awake_enabled() {
   systemctl --user --quiet is-active "$UNIT"
 }
@@ -34,6 +41,7 @@ enable_lid_awake() {
   fi
 
   systemd-run --user --collect --quiet --unit="$UNIT" \
+    --property=Restart=on-failure --property=RestartSec=1 \
     systemd-inhibit --what=handle-lid-switch --mode=block \
     --who="Omarchy" --why="Stay running with the lid closed" \
     sleep infinity || return
@@ -43,6 +51,7 @@ enable_lid_awake() {
   local attempt
   for attempt in {1..20}; do
     if lid_switch_inhibited; then
+      check_battery_floor
       return 0
     fi
     sleep 0.1

@@ -137,9 +137,11 @@ Item {
             UPowerDeviceState.Discharging,
             root.lidAwakeBatteryFloor
           )) return
-      var shouldNotify = !persisted.lidAwakeFloorReached
       persisted.lidAwakeFloorReached = true
-      if (shouldNotify) root.sendLidAwakeBatteryFloorWarning()
+      // Polls cannot reach this point again after the unit is stopped. A new
+      // stop therefore means the user re-enabled Lid Awake below the floor,
+      // and needs a fresh audible warning with the lid potentially closed.
+      root.sendLidAwakeBatteryFloorWarning()
     }
   }
 
@@ -193,6 +195,14 @@ Item {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.checkBattery()
+  }
+
+  ShellIpc {
+    target: "battery"
+
+    function checkLidAwakeFloor(): void {
+      root.checkLidAwakeBatteryFloor()
+    }
   }
 
   Connections {
