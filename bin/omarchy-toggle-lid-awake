@@ -40,8 +40,14 @@ enable_lid_awake() {
     return 0
   fi
 
+  # The unit refreshes the bar indicator itself whenever it starts or stops,
+  # so a helper that dies, restarts, or runs out of restarts outside this
+  # toggle never leaves the bar showing the wrong state. The leading - keeps a
+  # failed refresh from failing the unit.
+  local refresh="-$OMARCHY_PATH/bin/omarchy-shell omarchy.indicators refresh"
   systemd-run --user --collect --quiet --unit="$UNIT" \
     --property=Restart=on-failure --property=RestartSec=1 \
+    --property="ExecStartPost=$refresh" --property="ExecStopPost=$refresh" \
     systemd-inhibit --what=handle-lid-switch --mode=block \
     --who="Omarchy" --why="Stay running with the lid closed" \
     sleep infinity || return

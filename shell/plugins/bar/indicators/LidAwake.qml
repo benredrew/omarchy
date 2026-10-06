@@ -63,17 +63,6 @@ BarIndicator {
     }
   }
 
-  // A transient unit can fail outside a user-initiated toggle. Keep the bar
-  // honest once it has exhausted its restart attempts. Only an armed unit can
-  // fail this way; turning it on goes through the toggle, which refreshes.
-  Timer {
-    interval: 5000
-    running: root.laptop && root.lidAwake
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.refresh()
-  }
-
   onPressed: function() {
     if (root.bar) root.bar.run("omarchy-toggle-lid-awake")
   }

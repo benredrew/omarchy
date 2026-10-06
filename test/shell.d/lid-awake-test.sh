@@ -72,6 +72,7 @@ omarchy-toggle-lid-awake on
 grep -q -- '--what=handle-lid-switch' "$log" || fail "lid awake inhibits only the lid switch"
 grep -q -- '--unit=omarchy-lid-awake' "$log" || fail "lid awake runs as the omarchy-lid-awake unit"
 grep -q -- '--property=Restart=on-failure --property=RestartSec=1' "$log" || fail "lid awake restarts after an unexpected helper failure"
+grep -q -- "--property=ExecStartPost=-$OMARCHY_PATH/bin/omarchy-shell omarchy.indicators refresh --property=ExecStopPost=-$OMARCHY_PATH/bin/omarchy-shell omarchy.indicators refresh" "$log" || fail "lid awake refreshes the indicator whenever its unit starts or stops"
 pass "lid awake on starts a lid-switch inhibitor"
 
 grep -q 'omarchy-shell omarchy.indicators refresh' "$log" || fail "lid awake refreshes the bar indicator"

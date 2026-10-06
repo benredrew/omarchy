@@ -61,11 +61,7 @@ assert(
   'every successful low-battery disarm sends an alert'
 )
 assert(
-  /Timer \{[\s\S]*interval: 5000[\s\S]*onTriggered: root\.refresh\(\)/.test(indicator),
-  'Lid Awake periodically refreshes a transient-unit failure'
-)
-assert(
-  /Timer \{[\s\S]*running: root\.laptop && root\.lidAwake\n/.test(indicator),
-  'Lid Awake polls only while it is armed'
+  !/Timer \{/.test(indicator),
+  'Lid Awake does not poll; its unit refreshes the indicator on start and stop'
 )
 JS
