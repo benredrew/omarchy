@@ -8,12 +8,14 @@ BarIndicator {
   property bool lidAwake: false
   property bool laptop: false
   property bool refreshPending: false
+  readonly property var batteryService: bar?.shell?.firstPartyServiceFor("omarchy.battery")
+  readonly property bool batteryFloorReached: batteryService ? batteryService.lidAwakeFloorReached : false
 
   active: lidAwake
   activeText: "󰌢"
   inactiveText: "󰌢"
   activeTooltipText: "Allow Lid-Close Suspend"
-  inactiveTooltipText: "Stay On With Lid Closed"
+  inactiveTooltipText: batteryFloorReached ? "Battery floor reached" : "Stay On With Lid Closed"
 
   // Only a laptop has a lid to keep awake.
   visible: laptop && belongsInBlock

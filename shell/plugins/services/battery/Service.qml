@@ -11,6 +11,11 @@ Item {
   property string omarchyPath: Quickshell.env("OMARCHY_PATH")
 
   readonly property int batteryThreshold: 10
+  readonly property int defaultLidAwakeBatteryFloor: 10
+  readonly property var lidAwakeConfig: shell && shell.shellConfig && shell.shellConfig.lidAwake
+    ? shell.shellConfig.lidAwake : ({})
+  readonly property int lidAwakeBatteryFloor: BatteryModel.lidAwakeBatteryFloor(lidAwakeConfig.batteryFloor, defaultLidAwakeBatteryFloor)
+  readonly property bool lidAwakeFloorReached: persisted.lidAwakeFloorReached
   property string pendingPowerSource: ""
   property string activePowerProfile: ""
   readonly property bool powerSaverOnBattery: UPower.onBattery && activePowerProfile === "power-saver"
@@ -19,6 +24,7 @@ Item {
     id: persisted
     reloadableId: "omarchy-battery"
     property bool notifiedLowBattery: false
+    property bool lidAwakeFloorReached: false
   }
 
   function batteryPercentage() {
@@ -33,6 +39,24 @@ Item {
     var state = BatteryModel.shouldWarnLowBattery(UPower.displayDevice, UPower.onBattery, UPowerDeviceState.Discharging, batteryThreshold, persisted.notifiedLowBattery)
     persisted.notifiedLowBattery = state.notifiedLowBattery
     if (state.notify) sendLowBatteryWarning(state.level)
+    checkLidAwakeBatteryFloor()
+  }
+
+  function checkLidAwakeBatteryFloor() {
+    var reached = BatteryModel.hasReachedLidAwakeBatteryFloor(
+      UPower.displayDevice,
+      UPower.onBattery,
+      UPowerDeviceState.Discharging,
+      lidAwakeBatteryFloor
+    )
+
+    if (!reached) {
+      persisted.lidAwakeFloorReached = false
+      return
+    }
+
+    if (!lidAwakeStatusProcess.running && !lidAwakeStopProcess.running)
+      lidAwakeStatusProcess.running = true
   }
 
   function sendLowBatteryWarning(level) {
@@ -42,6 +66,22 @@ Item {
       String(level)
     ]
     warningProcess.running = true
+  }
+
+  function sendLidAwakeBatteryFloorWarning() {
+    if (lidAwakeFloorWarningProcess.running) return
+    lidAwakeFloorWarningProcess.command = [
+      "omarchy-notification-send",
+      "-g", "󰌢",
+      "-u", "critical",
+      "-i", "battery-caution",
+      "-t", "30000",
+      "Lid Awake paused",
+      "Battery reached " + lidAwakeBatteryFloor + "%. Lid-close suspend is enabled again."
+    ]
+    lidAwakeFloorWarningProcess.running = true
+
+    if (!lidAwakeFloorSoundProcess.running) lidAwakeFloorSoundProcess.running = true
   }
 
   function applyPowerProfile() {
@@ -70,6 +110,48 @@ Item {
   }
 
   Process { id: warningProcess }
+
+  Process {
+    id: lidAwakeStatusProcess
+    command: ["systemctl", "--user", "--quiet", "is-active", "omarchy-lid-awake"]
+    onExited: function(exitCode) {
+      if (exitCode !== 0) return
+      if (!BatteryModel.hasReachedLidAwakeBatteryFloor(
+            UPower.displayDevice,
+            UPower.onBattery,
+            UPowerDeviceState.Discharging,
+            root.lidAwakeBatteryFloor
+          )) return
+      lidAwakeStopProcess.running = true
+    }
+  }
+
+  Process {
+    id: lidAwakeStopProcess
+    command: ["omarchy-toggle-lid-awake", "off"]
+    onExited: function(exitCode) {
+      if (exitCode !== 0) return
+      if (!BatteryModel.hasReachedLidAwakeBatteryFloor(
+            UPower.displayDevice,
+            UPower.onBattery,
+            UPowerDeviceState.Discharging,
+            root.lidAwakeBatteryFloor
+          )) return
+      var shouldNotify = !persisted.lidAwakeFloorReached
+      persisted.lidAwakeFloorReached = true
+      if (shouldNotify) root.sendLidAwakeBatteryFloorWarning()
+    }
+  }
+
+  Process {
+    id: lidAwakeFloorWarningProcess
+  }
+
+  Process {
+    id: lidAwakeFloorSoundProcess
+    // A closed lid hides the toast, so the disarm needs an audible signal too.
+    command: ["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"]
+  }
 
   Process {
     id: powerProfileProcess

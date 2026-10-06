@@ -16,7 +16,7 @@ You toggle suspend by running `omarchy toggle suspend` from the terminal. That j
 
 Closing a laptop's lid suspends it, unless an external monitor is connected. To keep the laptop running with the lid shut, so downloads, builds, SSH and remote sessions carry on, turn on lid awake with `omarchy toggle lid awake`, from _Trigger > Toggle_, or by clicking the laptop icon among the bar's indicators. Closing the lid still locks the session and turns the screen off; only the suspend is skipped.
 
-Lid awake turns itself off when you reboot, so a laptop can't be left stuck awake in a bag. It also covers a different case from stay awake, which keeps the screen on and unlocked while the lid is open. `omarchy toggle lid awake status` prints the current state as JSON.
+Lid awake turns itself off when you reboot, so a laptop can't be left stuck awake in a bag. It also turns itself off at 10% battery while discharging, plays an alert, and restores normal lid-close suspend. It will not turn itself back on until you choose to do so. Set `lidAwake.batteryFloor` in `~/.config/omarchy/shell.json` to a whole percentage from 1–100 to choose another floor, or to `0` to disable this protection. It covers a different case from stay awake, which keeps the screen on and unlocked while the lid is open. `omarchy toggle lid awake status` prints the current state as JSON.
 
 ### Toggle hibernation
 
